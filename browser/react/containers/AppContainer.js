@@ -22,13 +22,16 @@ export default class AppContainer extends Component {
     this.next = this.next.bind(this);
     this.prev = this.prev.bind(this);
     this.selectAlbum = this.selectAlbum.bind(this);
+    this.selectArtist = this.selectArtist.bind(this);
     this.deselectAlbum = this.deselectAlbum.bind(this);
   }
 
   componentDidMount () {
     axios.get('/api/albums/')
       .then(res => res.data)
-      .then(album => this.onLoad(convertAlbums(album)));
+      .then(album => this.onLoad(convertAlbums(album)))
+      .then(() => axios.get('/api/artists'))
+      .then(({ data }) => this.setState({ artists: data }));
 
     AUDIO.addEventListener('ended', () =>
       this.next());
@@ -93,9 +96,25 @@ export default class AppContainer extends Component {
   selectAlbum (albumId) {
     axios.get(`/api/albums/${albumId}`)
       .then(res => res.data)
-      .then(album => this.setState({
-        selectedAlbum: convertAlbum(album)
-      }));
+      .then(album => this.setState({ selectedAlbum: convertAlbum(album) }));
+  }
+
+  selectArtist (artistId) {
+    let artist;
+    axios.get(`/api/artists/${artistId}`)
+      .then(res => res.data)
+      .then(_artist => {
+        artist = _artist;
+        return axios.get(`/api/artists/${artistId}/albums`);
+      })
+      .then(({ data }) => {
+        artist.albums = data.map(album => convertAlbum(album));
+        return axios.get(`/api/artists/${artistId}/songs`);
+      })
+      .then(({ data }) => {
+        artist.songs = data;
+        this.setState({ selectedArtist: artist });
+      });
   }
 
   deselectAlbum () {
@@ -109,18 +128,18 @@ export default class AppContainer extends Component {
           <Sidebar deselectAlbum={this.deselectAlbum} />
         </div>
         <div className="col-xs-10">
-        {
-          this.state.selectedAlbum.id ?
-          <Album
-            album={this.state.selectedAlbum}
-            currentSong={this.state.currentSong}
-            isPlaying={this.state.isPlaying}
-            toggleOne={this.toggleOne}
-          /> :
-          <Albums
-            albums={this.state.albums}
-            selectAlbum={this.selectAlbum}
-          />
+        { this.props.children && React.cloneElement(this.props.children, {
+            album: this.state.selectedAlbum,
+            artist: this.state.selectedArtist,
+            currentSong: this.state.currentSong,
+            isPlaying: this.state.isPlaying,
+            toggle: this.toggleOne,
+
+            albums: this.state.albums,
+            artists: this.state.artists,
+            selectAlbum: this.selectAlbum,
+            selectArtist: this.selectArtist
+          })
         }
         </div>
         <Player
